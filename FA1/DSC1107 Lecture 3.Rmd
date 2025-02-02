@@ -1,0 +1,112 @@
+---
+title: "DSC1107 Lecture 3"
+author: "Lindsay Faith Bazar"
+date: "February 02, 2025"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+```{r}
+# Load diamonds dataset
+library(ggplot2)
+data(diamonds)
+head(diamonds)
+```
+
+## 2.1: Filtering Diamonds with Ideal Cut and at Least 3 Carats
+
+```{r}
+ideal_large_diamonds <- diamonds %>% filter(cut == "Ideal" & carat >= 3)
+nrow(ideal_large_diamonds)
+```
+
+## 2.2: Selecting All Columns Except x, y, z
+
+```{r}
+diamonds_selected <- diamonds %>% select(-x, -y, -z)
+head(diamonds_selected)
+```
+
+## 2.3: Arranging Diamonds by Decreasing Length
+
+```{r}
+diamonds %>% arrange(desc(x)) %>% head(1)
+```
+
+## 3.1: Adding a Column for Good Color (D, E, F, G)
+
+```{r}
+diamonds <- diamonds %>% mutate(good_color = color %in% c("D", "E", "F", "G"))
+head(diamonds)
+```
+
+## 3.2: Checking if Any Diamond of at Least 1 Carat Costs Less Than $1000
+
+```{r}
+diamonds %>% filter(carat >= 1, price < 1000) %>% summarise(any_below_1000 = n() > 0)
+```
+
+## 4.1: Mean Price for Diamonds of Volume at Least 1 Carat
+
+```{r}
+diamonds %>% mutate(volume = x * y * z) %>% filter(volume >= 1) %>% summarise(mean_price = mean(price))
+```
+
+## 4.2: Counting Diamonds by Cut Using group_by and summarise
+
+```{r}
+diamonds %>% group_by(cut) %>% summarise(count = n())
+```
+
+## Visualizations
+
+### Histogram of Price Per Carat for Premium Cut Diamonds
+
+```{r}
+diamonds %>% 
+  filter(cut == "Premium") %>% 
+  mutate(price_per_carat = price / carat) %>% 
+  ggplot(aes(x = price_per_carat)) +
+  geom_histogram(bins = 30, fill = "blue", color = "black") +
+  theme_minimal()
+```
+
+### Maximum Price for Each Cut
+
+```{r}
+diamonds %>% 
+  group_by(cut) %>% 
+  summarise(max_price = max(price)) %>%
+  ggplot(aes(x = cut, y = max_price, fill = cut)) +
+  geom_col() +
+  theme_minimal()
+```
+
+## Exercises
+
+### Minimum Diamond Price (Two Ways)
+
+```{r}
+diamonds %>% summarise(min_price = min(price))
+diamonds %>% arrange(price) %>% slice(1)
+```
+
+### Diamonds with Length At Least 1.5 Times Width
+
+```{r}
+diamonds %>% filter(x >= 1.5 * y) %>% summarise(count = n())
+```
+
+### Median Carat for Diamonds of Each Cut (Among Colors D, E, F, G)
+
+```{r}
+diamonds %>% 
+  filter(color %in% c("D", "E", "F", "G")) %>%
+  group_by(cut) %>%
+  summarise(median_carat = median(carat))
+```

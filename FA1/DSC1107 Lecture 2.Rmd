@@ -1,0 +1,128 @@
+---
+title: "DSC1107 Lecture 2"
+author: "Lindsay Faith Bazar"
+date: "February 02, 2025"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggcorrplot)
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+diamonds %>% glimpse()
+```
+
+# Exploratory Data Analysis
+### Understanding Variables
+1. **Variables**: The dataset has 10 variables (`carat`, `cut`, `color`, `clarity`, `depth`, `table`, `price`, `x`, `y`, `z`).
+2. **Observations**: Each observation represents a diamond, with 53,940 diamonds in total.
+3. **Values**: Examples include `0.23` for `carat`, `Ideal` for `cut`, `E` for `color`, and `326` for `price`.
+4. **Continuous Variables**: `carat`, `depth`, `table`, `price`, `x`, `y`, and `z`.
+5. **Categorical Variables**: `cut`, `color`, and `clarity`.
+
+```{r}
+summary(diamonds)
+```
+
+# Variation
+## Discrete Variables
+Bar chart of `cut` variation:
+```{r}
+ggplot(diamonds, aes(x = cut)) + 
+  geom_bar(fill = "steelblue") + 
+  theme_minimal()
+```
+
+3.1. **Most common diamond cut**: `Ideal` is the most common, followed by `Premium`.
+
+## Continuous Variables
+Histogram of `carat`:
+```{r}
+ggplot(diamonds, aes(x = carat)) + 
+  geom_histogram(binwidth = 0.1, fill = "steelblue", color = "black") + 
+  theme_minimal()
+```
+
+3.2. **Variation in `carat`**: Most diamonds have a `carat` value below `3`, indicating that smaller diamonds are more frequent.
+
+# Covariation
+## Discrete vs. Discrete
+Count plot of `cut` vs `clarity`:
+```{r}
+ggplot(diamonds, aes(x = cut, y = clarity)) + 
+  geom_count() + 
+  theme_minimal()
+```
+
+4.1. **Relationship between `cut` and `clarity`**: `Ideal` cut diamonds have more occurrences across different clarity levels.
+
+## Continuous vs. Continuous
+Scatter plot of `x` vs `y`:
+```{r}
+ggplot(diamonds, aes(x = x, y = y)) + 
+  geom_point(alpha = 0.3) + 
+  geom_abline(slope = 1, intercept = 0, color = "red") + 
+  theme_minimal()
+```
+
+4.2. **Insight**: Most points lie close to `y = x`, indicating that diamonds tend to be symmetric in their length and width.
+
+## Continuous vs. Discrete
+Boxplot of `price` by `cut`:
+```{r}
+ggplot(diamonds, aes(x = cut, y = price)) + 
+  geom_boxplot(fill = "steelblue") + 
+  theme_minimal()
+```
+
+4.3. **Trend**: Higher `cut` quality does not necessarily mean a higher median price.
+
+
+# Additional Visualization Tools
+## Axis Transformations
+```{r}
+ggplot(diamonds, aes(x = carat, y = price)) + 
+  geom_point(alpha = 0.3) + 
+  scale_x_log10() + 
+  scale_y_log10() + 
+  theme_minimal()
+```
+
+## Multiple Aesthetics
+```{r}
+ggplot(diamonds, aes(x = carat, y = price, color = cut)) + 
+  geom_point(alpha = 0.3) + 
+  theme_minimal()
+```
+
+## Faceting
+```{r}
+ggplot(diamonds, aes(x = carat, y = price)) + 
+  geom_point(alpha = 0.3) + 
+  facet_wrap(~cut) + 
+  theme_minimal()
+```
+
+
+# Exercises
+## 7.1 Relating the Carat and Cut of a Diamond
+```{r}
+ggplot(diamonds, aes(x = cut, y = carat)) + 
+  geom_boxplot(fill = "steelblue") + 
+  theme_minimal()
+```
+
+**Conclusion**: Higher quality cuts tend to have lower median carat values, likely because larger diamonds are often cut for weight retention rather than optimal proportions.
+
+## 7.2 Relating the Size and Carat of a Diamond
+```{r}
+ggplot(diamonds, aes(x = carat, y = x * y * z)) + 
+  geom_point(alpha = 0.3, color = "steelblue") + 
+  theme_minimal() +
+  labs(y = "Size (x * y * z)")
+```
+
+**Conclusion**: There is a strong positive relationship between carat and size, which means that knowing the carat value gives a fairly accurate idea of the diamond's actual dimensions.
