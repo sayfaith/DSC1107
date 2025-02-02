@@ -1,0 +1,54 @@
+---
+title: "DSC1107 Lecture 4"
+author: "Lindsay Faith Bazar"
+date: "February 2, 2025"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+## Data Import
+
+```{r}
+heights <- read_csv("heights.csv")
+head(heights)
+```
+
+```{r}
+table1
+```
+
+```{r}
+table2
+```
+
+```{r}
+table3
+```
+
+```{r}
+table4a
+```
+
+```{r}
+table4b
+```
+
+## 4.1 Longer
+
+```{r}
+
+table4a %>%
+pivot_longer(cols = c(`1999`, `2000`), names_to = "year", values_to = "cases")
+```
+
+```{r}
+table4b %>%
+pivot_longer(cols = c(`1999`, `2000`), names_to = "year", values_to = "population")
+```
+
+The values in the selected columns of Table4a represent the number of cases while in Table4b, the values represent the population for each year.
+
