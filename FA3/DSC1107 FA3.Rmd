@@ -3,9 +3,7 @@ title: "DSC1107 FA3"
 author: "Lindsay Faith Bazar"
 date: "February 23, 2025"
 output:
-  html_document:
-    keep_md: true
-  md_document: default
+    github_document
 ---
 
 ```{r setup, include=FALSE}
