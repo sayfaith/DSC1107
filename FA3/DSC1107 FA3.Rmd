@@ -1,0 +1,218 @@
+---
+title: "DSC1107 FA3"
+author: "Lindsay Faith Bazar"
+date: "February 23, 2025"
+output:
+  html_document:
+    keep_md: true
+  md_document: default
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(ggrepel)
+library(kableExtra)
+library(cowplot)
+library(ggthemes)
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## 1.1 Import
+
+```{r import}
+load("ml_pay.rdata")
+mlb_raw <- as_tibble(ml_pay)
+print(mlb_raw)
+dim(mlb_raw) 
+```
+
+The dataset contains 30 rows and 54 columns. The column names such as the `payroll`, `avgwin`, and `p1998` to `x2014` is consistent with the data description of winning records and the payroll data of all 30 MLB teams from 1998 to 2014. 
+
+## 1.2 Tidy
+
+```{r}
+tidy_names <- c("team", "payroll_aggregate", "pct_wins_aggregate")
+mlb_aggregate <- mlb_raw %>% 
+  select(Team.name.2014, payroll, avgwin) %>% 
+  rename_with(~tidy_names)
+
+print(mlb_aggregate)
+```
+
+From the mlb_raw data, we selected the team name, total payroll, and aggregated win percentage and renamed the columns to match the names (`team`, `payroll_aggregate`, `pct_wins_aggregate`).
+
+```{r}
+
+mlb_yearly <- mlb_raw %>%
+  pivot_longer(cols = starts_with("p") | starts_with("X"), 
+               names_to = "column_name", values_to = "value") %>%
+  separate(column_name, into = c("prefix", "year", "suffix"), sep = "(?<=\\D)(?=\\d)|(?<=\\d)(?=\\D)", fill = "right", extra = "drop") %>%
+  mutate(tidy_col_name = case_when(
+    prefix == "p" ~ "payroll",
+    suffix == ".pct" ~ "pct_wins",
+    TRUE ~ "num_wins"
+  )) %>%
+  select(team = Team.name.2014, year, tidy_col_name, value) %>%
+  pivot_wider(names_from = tidy_col_name, values_from = value) %>%
+  mutate(year = as.integer(year)) %>%
+  arrange(team, year)
+
+mlb_yearly <- mlb_yearly %>% drop_na()
+print(mlb_yearly)
+
+```
+
+
+In this code, we converted the wide-format yearly data into long format using `pivot_longer()`.
+We also splits the column names into prefix (p/X), year (1998-2014), and suffix (.pct or blank) and assigns the correct names from
+`p` → `payroll`, `.pct` → `pct_wins`, and other values → `num_wins.`
+
+```{r}
+dim(mlb_aggregate)
+dim(mlb_yearly)
+```
+
+The `mlb_aggregate` (Aggregate Data) contains one row per team. Since there are 30 MLB teams, mlb_aggregate has 30 rows. This dataset summarizes total payroll and win percentage over the years (1998-2014).
+
+While the `mlb_yearly` (Yearly Data) contains one row per team per year. Since there are 30 teams and 17 years (1998-2014), mlb_yearly has:
+30 teams × 17 years = 510 rows This dataset includes payroll, win percentage, and total wins for each team in each year.
+
+## 1.3 Quality Control
+
+
+```{r}
+mlb_aggregate_computed <- mlb_yearly %>% 
+  group_by(team) %>% 
+  summarize(payroll_aggregate_computed = sum(payroll, na.rm = TRUE),
+            pct_wins_aggregate_computed = mean(pct_wins, na.rm = TRUE))
+
+mlb_aggregate_computed
+
+```
+
+```{r}
+mlb_aggregate_joined <- mlb_aggregate %>%
+  inner_join(mlb_aggregate_computed, by = "team")
+
+mlb_aggregate_joined
+```
+
+```{r}
+p1 <- ggplot(mlb_aggregate_joined, aes(x = payroll_aggregate, y = payroll_aggregate_computed)) +
+  geom_point() + geom_abline(slope = 1, intercept = 0, linetype = "dashed")
+
+p2 <- ggplot(mlb_aggregate_joined, aes(x = pct_wins_aggregate, y = pct_wins_aggregate_computed)) +
+  geom_point() + geom_abline(slope = 1, intercept = 0, linetype = "dashed")
+
+plot_grid(p1, p2, labels = c("Payroll", "Win %"))
+```
+
+The computed and provided aggregate statistics for payroll and win percentage show a strong alignment. Both scatter plots reveal that the computed values closely match the original values, as indicated by the clustering of points along the diagonal reference line. This suggests high accuracy in data computation.
+
+## 2.1 Payroll across Years 
+
+```{r}
+ggplot(mlb_yearly, aes(x = as.numeric(year), y = payroll, group = team, color = team)) +
+  geom_line(size = 1) +
+  facet_wrap(~ team) +
+  geom_hline(aes(yintercept = mean(payroll, na.rm = TRUE)), linetype = "dashed", color = "red") +
+  theme_minimal() +
+  labs(title = "Payroll Trends Across Years", x = "Year", y = "Payroll (in millions)") +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+```
+
+The dashed red line in each subplot represents the average payroll, which allows us to see how teams' payrolls have increased over time.
+
+## Top payroll teams
+
+```{r}
+
+top_payroll <- mlb_aggregate_computed %>% 
+  arrange(desc(payroll_aggregate_computed)) %>% 
+  slice(1:3)
+
+kable(top_payroll, caption = "Top 3 Payroll Teams ")
+
+```
+
+## Top Teams with Payroll Increase 
+
+```{r}
+payroll_increase <- mlb_yearly %>%
+  filter(year %in% c(1998, 2014)) %>%
+  select(team, year, payroll) %>%
+  pivot_wider(names_from = year, values_from = payroll, names_prefix = "payroll_") %>%
+  mutate(pct_increase = (payroll_2014 - payroll_1998) / payroll_1998 * 100) %>%
+  arrange(desc(pct_increase)) %>%
+  slice_head(n = 3)
+
+kable(payroll_increase, caption = "Top 3 Teams by Payroll Increase (1998-2014)")
+```
+
+The team with the `payroll_aggregate_computed` (Yankees, Red Sox, Braves) consistently have the highest payroll levels, always above the red dashed line. While the team with the `pct_increase` (Nationals, Tigers, Phillies) are identifiable by their sharp upward trends.
+
+## 2.2 Win Percentage Across Years 
+
+```{r, warning=FALSE, message=FALSE}
+ggplot(mlb_yearly, aes(x = as.numeric(year), y = pct_wins, group = team, color = team)) +
+  geom_line(size = 1) +
+  facet_wrap(~ team) +
+  geom_hline(aes(yintercept = mean(pct_wins, na.rm = TRUE)), linetype = "dashed", color = "red") +
+  theme_minimal() +
+  labs(title = "Win Percentage Trends Across Years", x = "Year", y = "Win Percentage") +
+  theme(legend.position = "none", plot.title = element_text(hjust = 0.5))
+```
+
+## Top Winning Teams 
+
+```{r}
+top_winning_teams <- mlb_aggregate_computed %>%
+  select(team, pct_wins_aggregate_computed) %>%
+  arrange(desc(pct_wins_aggregate_computed)) %>%
+  slice_head(n = 3)
+
+kable(top_winning_teams, caption = "Top 3 Teams by Aggregate Win Percentage")
+```
+
+## Top 3 Most Erratic Teams
+
+```{r}
+top_volatile_teams <- mlb_yearly %>%
+  group_by(team) %>%
+  summarise(pct_wins_sd = sd(pct_wins, na.rm = TRUE)) %>%
+  arrange(desc(pct_wins_sd)) %>%
+  slice_head(n = 3)
+
+kable(top_volatile_teams, caption = "Top 3 Most Erratic Teams by Win Percentage")
+```
+
+The top three teams by `pct_wins_aggregate_computed` in the plot appear mostly on top of the red line, indicating a high win percentage. While the `pct_wins_sd` appear to have high fluctuations in their win percentage trends, going from above to below the red line and vice versa.
+
+## 2.3 Win Percentage vs Payroll (15 points)
+
+```{r, warning=FALSE, message=FALSE}
+ggplot(mlb_aggregate, aes(x = payroll_aggregate, y = pct_wins_aggregate, label = team)) +
+  geom_point(color = "purple", size = 3, alpha = 0.7) +
+  geom_text_repel(size = 4) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  theme_minimal() +
+  labs(title = "Win Percentage vs Payroll", x = "Aggregate Payroll", y = "Aggregate Win Percentage") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+The relationship between payroll and win percentage appears to be positive, as indicated by the upward-sloping trend line in the scatter plot. This means that, generally, teams with higher payrolls tend to have higher win percentages.
+
+This result is expected because teams with higher payrolls can afford to sign better players, including high-performing free agents and experienced talent. Although there are some exceptions such as teams with lower payrolls but performs well or high-payroll teams that underperform, but the overall trend aligns with the general assumption that spending more money on players leads to better performance.
+
+##  2.4 Team Efficiency 
+
+```{r, warning=FALSE, message=FALSE}
+mlb_efficiency <- mlb_aggregate_computed %>% 
+  mutate(efficiency = pct_wins_aggregate_computed / payroll_aggregate_computed) %>% 
+  arrange(desc(efficiency)) %>% 
+  slice(1:3)
+
+kable(mlb_efficiency, caption = "Top 3 Most Efficient Teams")
+```
+
+The three teams identified as the most efficient in the previous plot (i.e., Win Percentage vs. Payroll) appear efficient in the sense that they have a relatively high win percentage despite having a moderate or lower payroll compared to other teams.
