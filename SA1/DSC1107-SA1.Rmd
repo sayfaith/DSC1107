@@ -1,0 +1,332 @@
+---
+title: "SA1 DSC1107"
+author: "Lindsay Faith Bazar"
+date: "March 19, 2025"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+suppressPackageStartupMessages(suppressWarnings({
+library(tidyverse)
+library(caret)
+library(glmnet)
+library(ggplot2)
+}))
+```
+
+## Unit 1: R for Data Mining
+
+#### 1. Intro to Modern Data Mining
+
+```{r}
+data <- read.csv("customer_churn.csv")
+
+sum(is.na(data))
+dim(data)
+str(data)
+summary(data)
+head(data)
+```
+The dataset contains 10,000 rows and 12 columns with no missing values. It includes customer information such as gender, senior citizen status, partner, dependents, tenure, phone and internet services, contract type, monthly and total charges, and churn status.
+
+Why data mining is important for this dataset?
+
+Data mining helps discover reasons why customers stop using the service by analyzing factors like tenure, monthly charges, and internet service. It also helps predict which customers are likely to leave so the company can take action to keep them. In short, Data mining helps the company understand and prevent customer churn, improving overall business performance.
+
+#### 2. Data Visualization
+
+```{r data_visualization}
+
+ggplot(data, aes(x = Tenure, fill = Churn)) + 
+  geom_histogram(bins = 30, color = "white", alpha = 0.8, position = "dodge") +
+  scale_fill_manual(values = c("#FF6F61", "#4CAF50")) +
+  theme_minimal() +
+  labs(title = "Churn Rate by Tenure", x = "Tenure (months)", y = "Proportion") +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold", size = 16))
+```
+
+Customers with shorter tenure (0-20 months) have a higher churn rate (green bar) compared to those with longer tenure.
+
+As tenure increases, the proportion of churn decreases, and more customers stay (red bar). However, even at higher tenures (50+ months), there are still some customers who churn, but the count is lower compared to earlier months.
+
+In general, customers with shorter tenures are more likely to churn, while long-term customers are more likely to stay.
+
+```{r}
+ggplot(data, aes(x = PhoneService, fill = Churn)) +
+  geom_bar(position = "dodge") +
+  facet_wrap(~InternetService) +
+  labs(title = "Churn Rate by Phone and Internet Service", x = "Phone Service", y = "Count")
+```
+
+DSL and Fiber Optic Users:
+
+- More customers did not churn (No) than those who churned (Yes).
+
+- Fiber optic users have a slightly higher number of churns compared to DSL users.
+
+No Internet Service:
+
+- Customers without internet service have fewer churn cases, but the proportion of churn is higher compared to those with internet.
+
+Overall, Fiber optic users have the highest churn count, suggesting they may be more likely to leave compared to DSL or those without internet.
+
+
+```{r}
+ggplot(data, aes(x = MonthlyCharges, fill = Churn)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("No" = "#FF6F61", "Yes" = "#4CAF50")) +
+  labs(title = "Monthly Charges Distribution by Churn", x = "Monthly Charges", y = "Density")
+```
+
+The density plot shows the distribution of Monthly Charges for customers who churned (Yes) and those who did not churn (No).
+
+Both groups have a similar distribution across Monthly Charges.
+There is no strong difference between the churn and non-churn groups for most charge ranges. Some slight variations exist where churn rates are slightly higher or lower at specific points, but overall, the densities overlap a lot.
+
+#### 3. Data Transformation
+
+I noticed that the Senior Citizen values are either 0 or 1 earlier, which we will switch to Yes and No for consistency.
+
+```{r}
+data$SeniorCitizen <- ifelse(data$SeniorCitizen == 1, "Yes", "No")
+head(data$SeniorCitizen)
+```
+
+Handle missing values appropriately.
+
+```{r data_transformation}
+sum(is.na(data))
+```
+
+There are no missing values so we will proceed.
+
+Convert categorical variables into factor variables.
+
+```{r}
+data$Churn <- as.factor(data$Churn)
+data$PhoneService <- as.factor(data$PhoneService)
+data$InternetService <- as.factor(data$InternetService)
+data$Gender <- as.factor(data$Gender)
+data$Partner <- as.factor(data$Partner)
+data$Dependents <- as.factor(data$Dependents)
+data$Contract <- as.factor(data$Contract)
+```
+
+Normalize or standardize numerical features where necessary.
+
+```{r}
+
+data$MonthlyCharges <- scale(data$MonthlyCharges)
+data$TotalCharges<- scale(data$TotalCharges)
+data$Tenure <- scale(data$Tenure)
+```
+
+#### 4. Data Wrangling
+
+```{r data_wrangling}
+
+data <- data %>% filter(MonthlyCharges < quantile(MonthlyCharges, 0.99))
+
+
+data <- data %>%
+  mutate(TenureGroup = cut(Tenure,
+    breaks = quantile(Tenure, probs = c(0, 0.25, 0.5, 0.75, 1)),
+    labels = c("Low Tenure", "Medium Tenure", "High Tenure", "Loyal Customers"),
+    include.lowest = TRUE
+  ))
+
+table(data$TenureGroup)
+```
+
+#### 5. Review
+
+-Customers with shorter tenure are more likely to churn. -Service types have varying churn rates, with some categories being more vulnerable. -Higher monthly charges are correlated with higher churn rates, indicating pricing sensitivity.
+
+## 2. Unit 2: Tuning Predictive Models
+
+#### 6. Model Complexity
+
+```{r}
+
+library(rpart)
+
+set.seed(123)
+trainIndex <- createDataPartition(data$Churn, p = 0.8, list = FALSE)
+trainData <- data[trainIndex, ]
+testData <- data[-trainIndex, ]
+
+logit_model <- glm(Churn ~ Tenure + MonthlyCharges + TotalCharges, data = trainData, family = "binomial")
+summary(logit_model)
+
+testData$TotalCharges[is.na(testData$TotalCharges)] <- median(testData$TotalCharges, na.rm=TRUE)
+
+tree_model <- rpart(Churn ~ Tenure + MonthlyCharges + TotalCharges + Gender + Partner + Dependents + PhoneService + InternetService + Contract, 
+                             data = testData, 
+                             method = "class", 
+                             control = rpart.control(cp = 0, maxdepth = 5))
+
+summary(tree_model)
+```
+
+
+```{r}
+library(rpart.plot)
+
+rpart.plot(tree_model, type = 2, extra = 104, fallen.leaves = TRUE)
+```
+
+
+#### 7. Bias-Variance Trade-Off
+
+- Tradeoff
+
+Bias: Model is too simple, and misses patterns (underfitting). Just like the Logistic Regression that is lower variance but with higher bias.
+
+
+Variance: Model is too complex and captures noise (overfitting). Just like the Decision Tree, lower bias but higher variance.
+
+- Effect of Complexity:
+
+Low Complexity: Misses patterns → perform poorly. 
+
+High Complexity: Too detailed → loses generalization.
+
+
+#### 8. Cross Validation
+
+```{r}
+ctrl <- trainControl(method = "cv", number = 10)
+
+
+set.seed(123)
+logit_model_cv <- train(Churn ~ Tenure + MonthlyCharges + TotalCharges, 
+                        data = trainData, 
+                        method = "glm", 
+                        family = "binomial",
+                        trControl = ctrl)
+
+pred_logit <- predict(logit_model_cv, testData)
+
+conf_matrix_logit <- confusionMatrix(pred_logit, testData$Churn)
+conf_matrix_logit
+
+logit_metrics <- data.frame(
+  Accuracy = conf_matrix_logit$overall["Accuracy"],
+  Precision = conf_matrix_logit$byClass["Pos Pred Value"],
+  Recall = conf_matrix_logit$byClass["Sensitivity"],
+  F1_Score = 2 * ((conf_matrix_logit$byClass["Pos Pred Value"] * conf_matrix_logit$byClass["Sensitivity"]) /
+                   (conf_matrix_logit$byClass["Pos Pred Value"] + conf_matrix_logit$byClass["Sensitivity"]))
+)
+logit_metrics
+```
+
+#### 9. Classification
+
+```{r random forest}
+
+library(randomForest)
+
+set.seed(42)
+rf_model <- randomForest(Churn ~ ., data = trainData, ntree = 100, mtry = 3, importance = TRUE)
+
+print(rf_model)
+
+rf_pred <- predict(rf_model, testData)
+
+rf_cm <- confusionMatrix(rf_pred, testData$Churn, positive = "Yes")
+print(rf_cm)
+
+varImpPlot(rf_model)
+
+```
+
+## 3. Unit 3: Regression-Based Methods
+
+#### 10. Logistic Regression
+
+```{r}
+logit_model <- glm(Churn ~ Tenure + MonthlyCharges + TotalCharges, 
+                   data = trainData, 
+                   family = binomial)
+
+summary(logit_model)
+
+pred_logit_prob <- predict(logit_model, testData, type = "response")
+
+pred_logit <- ifelse(pred_logit_prob > 0.5, "Yes", "No")
+
+conf_matrix_logit <- confusionMatrix(as.factor(pred_logit), testData$Churn)
+conf_matrix_logit
+```
+
+The logistic regression model shows that none of the predictors (Tenure, MonthlyCharges, and TotalCharges) significantly affect churn, as all p-values are greater than 0.05. The intercept suggests a higher likelihood of no churn when all predictors are zero. The small difference between null and residual deviance indicates that the model explains very little variation in the data, and the AIC value of 9253 suggests a weak model. Overall, the model is not statistically significant, and further improvements or additional variables may be needed for better prediction.
+
+#### 11. Regression in High Dimensions
+
+```{r}
+
+library(factoextra)
+
+num_features <- trainData %>% 
+  select(Tenure, MonthlyCharges, TotalCharges) 
+
+pca_model <- prcomp(num_features, center = TRUE, scale. = TRUE)
+
+summary(pca_model)
+
+fviz_eig(pca_model, addlabels = TRUE, ylim = c(0, 50))
+
+trainData_pca <- cbind(trainData, pca_model$x[, 1:2])
+testData_pca <- predict(pca_model, newdata = testData)
+
+```
+
+#### 12. Ridge Regression
+
+```{r}
+library(glmnet)
+
+x_train <- model.matrix(Churn ~ Tenure + MonthlyCharges + TotalCharges + Gender + SeniorCitizen, data = trainData)[, -1]
+y_train <- ifelse(trainData$Churn == "Yes", 1, 0)
+
+set.seed(123)
+ridge_model <- cv.glmnet(x_train, y_train, alpha = 0)
+
+plot(ridge_model)
+```
+
+Optimal lambda: 
+
+```{r}
+optimal_lambda_ridge <- ridge_model$lambda.min
+optimal_lambda_ridge
+
+ridge_final <- glmnet(x_train, y_train, alpha = 0, lambda = optimal_lambda_ridge)
+ridge_final
+
+```
+
+#### 13. Lasso Regression
+
+```{r}
+
+set.seed(123)
+lasso_model <- cv.glmnet(x_train, y_train, alpha = 1)
+
+plot(lasso_model)
+
+best_lambda_lasso <- lasso_model$lambda.min
+best_lambda_lasso
+
+lasso_final <- glmnet(x_train, y_train, alpha = 1, lambda = best_lambda_lasso)
+lasso_final
+
+lasso_coefs <- predict(lasso_final, type = "coefficients", s = best_lambda_lasso)
+lasso_coefs
+```
+
+Generally, the LASSO regression results show that most of the features were not important for predicting the outcome, as their coefficients were reduced to zero. This means that Tenure, TotalCharges, GenderMale, and SeniorCitizenYes did not contribute much to the model’s predictions. The only feature with a small effect was MonthlyCharges, but even that was close to zero. 
