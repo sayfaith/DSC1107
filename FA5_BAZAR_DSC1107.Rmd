@@ -1,0 +1,225 @@
+
+---
+title: "FA5 DSC1107"
+author: "Bazar, Lindsay Faith C."
+date: "May 03, 2025"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(caret)
+library(ROCR)
+library(pROC)
+library(reshape2)
+library(ggplot2)
+library(rsample)
+```
+
+## Introduction
+
+The objective of this analysis is to understand and apply logistic regression to a binary classification problem: predicting survival on the Titanic. The dataset includes passenger attributes such as age, class, gender, and fare. We will preprocess the data, train a logistic regression model, and evaluate its performance using standard metrics.
+
+```{r}
+train_titanic <- read.csv("train.csv")
+head(train_titanic)
+```
+
+```{r}
+test_titanic <- read.csv("test.csv")
+head(test_titanic)
+```
+
+```{r}
+gender_titanic <- read.csv("gender_submission.csv")
+head(gender_titanic)
+```
+
+## Data Preprocessing
+
+```{r}
+test_titanic <- left_join(test_titanic, gender_titanic, by = "PassengerId")
+
+train_titanic <- train_titanic[, names(test_titanic)]
+
+titanic_data <- rbind(train_titanic, test_titanic)
+```
+
+```{r}
+
+colSums(is.na(titanic_data))
+
+```
+
+The dataset contains 263 missing values in the Age column and 1 missing value in the Fare column. Given the large number of missing values in Age, we will impute this column with the median value of the entire dataset.
+
+On the other hand, since there's only a single missing value in Fare, we can simply drop this entry. 
+
+```{r}
+
+titanic_data$Age[is.na(titanic_data$Age)] <- median(titanic_data$Age, na.rm = TRUE)
+
+titanic_data <- titanic_data[!is.na(titanic_data$Fare), ]
+colSums(is.na(titanic_data))
+```
+
+All null values have now been removed from the entire column.
+
+The Cabin column contains blank entries for some passengers. We will replace these missing values with "NA" to represent unknown. Additionally, we will remove the number portion and retain only the letter, as the letter corresponds to the deck level. 
+
+```{r}
+
+titanic_data$Cabin[is.na(titanic_data$Cabin)] <- "NA"
+titanic_data$Deck <- substr(titanic_data$Cabin, 1, 1)
+```
+
+Checking,
+
+```{r}
+str(titanic_data)
+```
+
+We then assign binary values to the sex variable:
+
+```{r}
+
+titanic_data$Sex <- as.character(titanic_data$Sex)
+
+titanic_data$Sex <- ifelse(titanic_data$Sex == "male", 1, 0)
+
+str(titanic_data)
+
+```
+
+Standardizing the numerical features:
+
+```{r}
+
+titanic_data$Age <- scale(titanic_data$Age)
+titanic_data$Fare <- scale(titanic_data$Fare)
+titanic_data$SibSp <- scale(titanic_data$SibSp)
+titanic_data$Parch <- scale(titanic_data$Parch)
+
+str(titanic_data)
+
+```
+
+Splitting training and test to 80-20, respectively.
+
+```{r}
+set.seed(432)
+
+split <- initial_split(titanic_data, prop = 0.8, strata = "Survived")
+
+train_titanic <- training(split)
+test_titanic <- testing(split)
+```
+
+
+## Model Implementation
+
+```{r}
+log_model <- glm(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare + Deck + Embarked, data = train_titanic , family = binomial)
+summary(log_model)
+```
+
+
+```{r}
+pred_probs <- predict(log_model, newdata = test_titanic, test = "response")
+pred_labels <- ifelse(pred_probs > 0.5, 1, 0)
+```
+
+```{r}
+survivors <- (sum(pred_labels)/length(pred_labels)) * 100
+
+survivors
+```
+
+33.20% of the individuals in the test set were predicted to have survived, whereas the remaining majority were predicted not to survive.
+
+## Model Evaluation
+
+```{r confusion}
+conf <- confusionMatrix(factor(pred_labels), 
+                        factor(test_titanic$Survived))
+```
+
+
+```{r f1-score}
+accuracy <- conf$overall["Accuracy"]
+precision <- conf$byClass["Precision"]
+recall <- conf$byClass["Sensitivity"]
+f1 <- 2 * (precision * recall) / (precision + recall)
+
+cat("Accuracy: ", round(accuracy, 4), "\n")
+cat("Precision: ", round(precision, 4), "\n")
+cat("Recall: ", round(recall, 4), "\n")
+cat("F1 Score: ", round(f1, 4), "\n")
+```
+
+
+```{r heatmaps}
+cm_table <- as.table(conf$table)
+cm_df <- as.data.frame(cm_table)
+colnames(cm_df) <- c("Prediction", "Reference", "Freq")
+
+ggplot(data = cm_df, aes(x = Reference, y = Prediction, fill = Freq)) +
+  geom_tile(color = "white") +
+  geom_text(aes(label = Freq), size = 6) +
+  scale_fill_gradient(low = "blue", high = "darkblue") +
+  labs(title = "Confusion Matrix Heatmap", x = "Actual", y = "Predicted")
+```
+
+
+```{r}
+
+roc_curve <- roc(response = test_titanic$Survived, predictor = as.numeric(pred_probs))
+plot(roc_curve, col = "blue", lwd = 2, main = "ROC Curve")
+auc(roc_curve)
+```
+
+```{r feature-importance}
+odds_ratios <- exp(coef(log_model))
+
+odds_ratios_clean <- odds_ratios[!is.na(odds_ratios)]
+
+percent_change <- ifelse(odds_ratios_clean > 1,
+                         (odds_ratios_clean - 1) * 100,
+                         (1 - odds_ratios_clean) * 100)
+
+
+results <- data.frame(
+  Variable = names(odds_ratios_clean),
+  Odds_Ratio = round(odds_ratios_clean, 3),
+  Percent_Change = round(percent_change, 2)
+)
+
+print(results)
+```
+
+
+## Results Interpretation & Discussion
+
+&nbsp; The logistic regression model examined several factors influencing the likelihood of survival aboard the Titanic. The findings revealed notable effects from passenger class, age, family connections aboard, fare paid and gender.
+
+&nbsp; Starting with passenger class, the results indicate that for each increase in ticket class (for example, moving from first to second, or second to third class), the odds of survival decreased by approximately 52.31%. This confirms historical accounts that first-class passengers had significantly better access to lifeboats and rescue opportunities.
+
+&nbsp; Age was another important predictor. With each additional year of age, the odds of survival decreased by about 34%. This means that younger passengers were much more likely to survive than older ones, consistent with the prioritization of "women and children first" during the evacuation.
+
+&nbsp; When considering family relationships aboard, the number of siblings or spouses (SibSp) present slightly reduced survival odds — by around 28% for each additional relative. A similar, though smaller, effect was observed for the number of parents or children aboard (Parch), with each additional family member decreasing survival odds by approximately 3%. These effects may reflect the practical difficulties of escaping together or the tendency for family groups to stay behind while assisting each other.
+
+&nbsp; The amount paid for the ticket (Fare) also influenced survival outcomes. For every unit increase in fare, survival odds increased by roughly 8%. This suggests that passengers who paid higher fares, often associated with better class and cabin proximity to lifeboats, had a survival advantage.
+
+&nbsp; By far, the most significant effect was seen in gender. Being female increased the odds of survival by a striking 98% compared to male passengers. This overwhelming difference aligns with documented lifeboat boarding protocols, which gave priority to women.
+
+## Report Submission
+
+&nbsp; The Titanic dataset is a dataset that aims to predict whether a passenger survived the Titanic shipwreck based on several features such as age, sex, fare, and passenger class.  The dataset used contains records of 891 passengers and includes various demographic and travel-related attributes. These features include the target variable Survived (0 = did not survive, 1 = survived), Pclass (passenger class: 1st, 2nd, or 3rd), Sex (male or female), Age, SibSp (number of siblings or spouses aboard), Parch (number of parents or children aboard), Fare (ticket fare), and Embarked (port of embarkation: C = Cherbourg, Q = Queenstown, S = Southampton). These variables serve as the basis for predicting survival outcomes using logistic regression, a statistical model commonly used for binary classification problems.
+
+&nbsp; Before building the model, the dataset underwent a series of preprocessing steps to ensure data quality and compatibility with the logistic regression algorithm. One of the initial tasks involved handling missing values. The Age column had 263 missing entries, which were imputed using the median age to preserve the overall data distribution and minimize data loss. The Fare column contained only one missing value, which was simply removed. Although the Cabin column did not register missing values in the column summary, many entries were blank. These were replaced with "NA" to denote an unknown cabin, and only the first character of each cabin entry was retained.
+
+&nbsp; The result shows that the female gender was the strongest predictor of survival, dramatically increasing the likelihood of survival. On the other hand, being in a lower class or older greatly decreased survival chances. Larger families had a slight disadvantage, while paying a higher fare provided a small advantage in survival.
+
+&nbsp; In addition to examining the effects of individual predictors, it’s important to assess how well the logistic regression model performed overall. Several key metrics provide insight into the model’s predictive  ability.The model achieved an accuracy of 86%, meaning it correctly classified approximately 86 out of every 100 passengers as either surviving or not. This high accuracy indicates strong overall model performance.To better understand how the model handled positive and negative cases, we can look at precision, recall (sensitivity), and the F1 score. Precision was also 86%. Recall (Sensitivity) was 92%, suggesting that the model successfully identified over 92% of the actual survivors. This high recall value reflects the model's ability to detect positive cases (survivors) effectively.The F1 score, which balances precision and recall, was 89.35%. This solid score confirms that the model maintains a strong trade-off between catching most survivors while minimizing incorrect survival predictions.
+
+&nbsp; Some suggestions for future improvements is to combine SibSp (number of siblings/spouses aboard) and Parch (number of parents/children aboard) to create a Family Size feature. Larger families might have had a different survival rate, so this could be a useful feature. Also, instead of using median for age, it can be bin into categories (e.g., child, young adult, adult, senior) to simplify the feature and make it more meaningful.
